@@ -102,7 +102,7 @@
     // "allowUnusedLabels": true,
     // "allowUnreachableCode": true,
 
-    // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
+    // "skipDefaultLibCheck": true,
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   }
 }

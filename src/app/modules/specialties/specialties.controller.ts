@@ -6,7 +6,6 @@ import sendResponse from "../../shared/sendResponse";
 
 const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await SpecialtiesService.insertIntoDB(req);
-
   sendResponse(res, {
     statusCode: httpStatus.OK,
     success: true,

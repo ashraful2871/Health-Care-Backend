@@ -4,6 +4,7 @@ import { SpecialtiesValidtaion } from "./specialties.validation";
 import auth from "../../middlewares/auth";
 import { UserRole } from "@prisma/client";
 import { fileUploader } from "../../helper/fileUploader";
+import { userController } from "../user/user.controller";
 
 const router = express.Router();
 

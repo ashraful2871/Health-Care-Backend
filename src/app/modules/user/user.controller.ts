@@ -6,6 +6,7 @@ import pick from "../../helper/pick";
 import { userFilterableFields, userSearchAbleFields } from "./user.constain";
 import { IJWTPayload } from "../../type/common";
 import { StatusCodes } from "http-status-codes";
+import { IAuthUser } from "../../interfaces/common";
 
 const createPatient = catchAsync(async (req: Request, res: Response) => {
   const result = await userService.createPatient(req);
@@ -79,6 +80,21 @@ const changedProfileStatus = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const updateMyProfile = catchAsync(
+  async (req: Request & { user?: IAuthUser }, res: Response) => {
+    const user = req.user;
+
+    const result = await userService.updateMyProfile(user as IAuthUser, req);
+
+    sendResponse(res, {
+      statusCode: StatusCodes.OK,
+      success: true,
+      message: "My profile updated!",
+      data: result,
+    });
+  }
+);
+
 export const userController = {
   createPatient,
   createDoctor,
@@ -86,4 +102,5 @@ export const userController = {
   createAdmin,
   getMyProfile,
   changedProfileStatus,
+  updateMyProfile,
 };

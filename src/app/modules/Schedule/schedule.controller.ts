@@ -4,17 +4,20 @@ import sendResponse from "../../shared/sendResponse";
 import { scheduleService } from "./schedule.service";
 import pick from "../../helper/pick";
 import { IJWTPayload } from "../../type/common";
+import { IAuthUser } from "../../interfaces/common";
+import { StatusCodes } from "http-status-codes";
 
 const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
   const result = await scheduleService.insertIntoDB(req.body);
 
   sendResponse(res, {
-    statusCode: 201,
+    statusCode: StatusCodes.CREATED,
     success: true,
     message: "Schedule created successfully!",
     data: result,
   });
 });
+
 const schedulesForDoctor = catchAsync(
   async (req: Request & { user?: IJWTPayload }, res: Response) => {
     const option = pick(req.query, ["page", "limit", "sortBy", "sortOrder"]);

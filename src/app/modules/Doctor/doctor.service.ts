@@ -2,11 +2,15 @@ import { Doctor, Prisma, UserStatus } from "@prisma/client";
 import { paginationHelper } from "../../helper/paginationHelper";
 import { doctorSearchableFields } from "./doctor.constaint";
 import { prisma } from "../../shared/prisma";
-import { IUpdateDoctorSpecialties } from "./doctor.interface";
+import { IDoctorFilterRequest, IDoctorUpdate } from "./doctor.interface";
 import { openai } from "../../helper/open-router";
 import { extractJsonFromMessage } from "../../helper/extractJsonFromMessage";
+import { IPaginationOptions } from "../../interfaces/pagination";
 
-const getAllFromDB = async (filters: any, options: any) => {
+const getAllFromDB = async (
+  filters: IDoctorFilterRequest,
+  options: IPaginationOptions
+) => {
   const { page, limit, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
 
@@ -26,12 +30,15 @@ const getAllFromDB = async (filters: any, options: any) => {
   }
 
   if (specialties && specialties.length > 0) {
+    const specialtiesArray = Array.isArray(specialties)
+      ? specialties
+      : [specialties];
     andConditions.push({
       doctorSpecialties: {
         some: {
           specialities: {
             title: {
-              contains: specialties,
+              in: specialtiesArray,
               mode: "insensitive",
             },
           },
@@ -55,16 +62,30 @@ const getAllFromDB = async (filters: any, options: any) => {
     where: whereConditions,
     skip,
     take: limit,
-    orderBy: {
-      [sortBy]: sortOrder,
-    },
+    orderBy:
+      options.sortBy && options.sortOrder
+        ? { [options.sortBy]: options.sortOrder }
+        : { averageRating: "desc" },
     include: {
       doctorSpecialties: {
         include: {
-          specialities: true,
+          specialities: {
+            select: {
+              title: true,
+            },
+          },
         },
       },
-      review: true,
+      doctorSchedule: {
+        include: {
+          schedule: true,
+        },
+      },
+      review: {
+        select: {
+          rating: true,
+        },
+      },
     },
   });
 
@@ -77,60 +98,125 @@ const getAllFromDB = async (filters: any, options: any) => {
   };
 };
 
-const updateDoctorInfoDb = async (
-  id: string,
-  payload: Partial<IUpdateDoctorSpecialties>
-) => {
+const updateDoctorInfoDb = async (id: string, payload: IDoctorUpdate) => {
+  const { specialties, removeSpecialties, ...doctorData } = payload;
+
   const doctorInfo = await prisma.doctor.findFirstOrThrow({
     where: {
       id,
+      isDeleted: false,
     },
   });
-  const { specialties, ...doctorData } = payload;
 
-  return await prisma.$transaction(async (tnx) => {
-    if (specialties && specialties.length > 0) {
-      const deleteSpecialtyIds = specialties.filter(
-        (specialty) => specialty.isDeleted
-      );
+  await prisma.$transaction(async (tnx) => {
+    if (Object.keys(doctorData).length > 0) {
+      await tnx.doctor.update({
+        where: {
+          id,
+        },
+        data: doctorData,
+      });
 
-      for (const specialties of deleteSpecialtyIds) {
-        await tnx.doctorSpecialties.deleteMany({
+      if (
+        removeSpecialties &&
+        Array.isArray(removeSpecialties) &&
+        removeSpecialties.length > 0
+      ) {
+        const existingDoctorSpecialties = await tnx.doctorSpecialties.findMany({
           where: {
-            doctorId: id,
-            specialitiesId: specialties.specialtyId,
+            doctorId: doctorInfo.id,
+            specialitiesId: {
+              in: removeSpecialties,
+            },
           },
         });
-      }
 
-      const createSpecialtyIds = specialties.filter(
-        (specialties) => !specialties.isDeleted
-      );
-
-      for (const specialties of createSpecialtyIds) {
-        await tnx.doctorSpecialties.create({
-          data: {
-            doctorId: id,
-            specialitiesId: specialties.specialtyId,
+        if (existingDoctorSpecialties.length !== removeSpecialties.length) {
+          const foundIds = existingDoctorSpecialties.map(
+            (ds) => ds.specialitiesId
+          );
+          const notFound = removeSpecialties.filter(
+            (id) => !foundIds.includes(id)
+          );
+          throw new Error(
+            `Cannot remove non-existent specialties: ${notFound.join(", ")}`
+          );
+        }
+        await tnx.doctorSpecialties.deleteMany({
+          where: {
+            doctorId: doctorInfo.id,
+            specialitiesId: {
+              in: removeSpecialties,
+            },
           },
         });
       }
     }
-    const updatedData = await tnx.doctor.update({
-      where: {
-        id: doctorInfo.id,
-      },
-      data: doctorData,
-      include: {
-        doctorSpecialties: {
-          include: {
-            specialities: true,
+
+    if (specialties && Array.isArray(specialties) && specialties.length > 0) {
+      const existingSpecialties = await tnx.specialties.findMany({
+        where: {
+          id: {
+            in: specialties,
           },
         },
-      },
-    });
-    return updatedData;
+        select: {
+          id: true,
+        },
+      });
+      const existingSpecialtyIds = existingSpecialties.map((s) => s.id);
+      const invalidSpecialtyIds = specialties.filter(
+        (id) => !existingSpecialtyIds.includes(id)
+      );
+      if (invalidSpecialtyIds.length > 0) {
+        throw new Error(
+          `Invalid specialty IDs: ${invalidSpecialtyIds.join(", ")}`
+        );
+      }
+      const currentDoctorSpecialties = await tnx.doctorSpecialties.findMany({
+        where: {
+          doctorId: doctorInfo.id,
+          specialitiesId: {
+            in: specialties,
+          },
+        },
+        select: {
+          specialitiesId: true,
+        },
+      });
+
+      const currentSpecialtyIds = currentDoctorSpecialties.map(
+        (ds) => ds.specialitiesId
+      );
+      const newSpecialties = specialties.filter(
+        (id) => !currentSpecialtyIds.includes(id)
+      );
+      if (newSpecialties.length > 0) {
+        const doctorSpecialtiesData = newSpecialties.map((specialtyId) => ({
+          doctorId: doctorInfo.id,
+          specialitiesId: specialtyId,
+        }));
+
+        await tnx.doctorSpecialties.createMany({
+          data: doctorSpecialtiesData,
+        });
+      }
+    }
   });
+
+  const result = await prisma.doctor.findUnique({
+    where: {
+      id: doctorInfo.id,
+    },
+    include: {
+      doctorSpecialties: {
+        include: {
+          specialities: true,
+        },
+      },
+    },
+  });
+  return result;
 };
 
 const getByIdFromDB = async (id: string): Promise<Doctor | null> => {

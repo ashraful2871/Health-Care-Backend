@@ -4,10 +4,12 @@ import { patientSearchableFields } from "./patient.constant";
 import { IPatientFilterRequest } from "./patient.interface";
 import { prisma } from "../../shared/prisma";
 import { IJWTPayload } from "../../type/common";
+import { IPaginationOptions } from "../../interfaces/pagination";
 
 const getAllFromDB = async (
   filters: IPatientFilterRequest,
-  options: IOptions
+  options: IPaginationOptions,
+  includeHealthData: boolean = false
 ) => {
   const { limit, page, skip } = paginationHelper.calculatePagination(options);
   const { searchTerm, ...filterData } = filters;
@@ -43,6 +45,22 @@ const getAllFromDB = async (
   const whereConditions: Prisma.PatientWhereInput =
     andConditions.length > 0 ? { AND: andConditions } : {};
 
+  // Conditional include based on parameter
+  const includeClause = includeHealthData
+    ? {
+        medicalReport: true,
+        patientHealthData: true,
+      }
+    : {
+        medicalReport: {
+          select: {
+            id: true,
+            reportName: true,
+            createdAt: true,
+          },
+        },
+      };
+
   const result = await prisma.patient.findMany({
     where: whereConditions,
     skip,
@@ -53,6 +71,7 @@ const getAllFromDB = async (
         : {
             createdAt: "desc",
           },
+    include: includeClause,
   });
   const total = await prisma.patient.count({
     where: whereConditions,

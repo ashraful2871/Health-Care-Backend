@@ -146,8 +146,13 @@ const forgotPassword = async (payload: { email: string }) => {
 
 const resetPassword = async (
   token: string,
-  payload: { id: string; password: string }
+  payload: { id: string; newPassword: string }
 ) => {
+  // Add validation for password
+  if (!payload?.newPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, "Password is required!");
+  }
+
   const userData = await prisma.user.findUniqueOrThrow({
     where: {
       id: payload.id,
@@ -155,7 +160,10 @@ const resetPassword = async (
     },
   });
 
-  const isValidToken = jwtHelper.verifyToken("secret", "1h");
+  const isValidToken = jwtHelper.verifyToken(
+    token,
+    config.jwt.jwt_secret as string
+  );
 
   if (!isValidToken) {
     throw new ApiError(StatusCodes.FORBIDDEN, "Forbidden!");
@@ -163,8 +171,8 @@ const resetPassword = async (
 
   // hash password
   const password = await bcrypt.hash(
-    payload.password,
-    Number(config.salt_round)
+    payload.newPassword,
+    Number(process.env.SALT_ROUND)
   );
 
   // update into database
@@ -174,6 +182,7 @@ const resetPassword = async (
     },
     data: {
       password,
+      needPasswordChange: false,
     },
   });
 };

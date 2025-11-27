@@ -40,7 +40,8 @@ const getMyAppointment = catchAsync(
       success: true,
       message: "Appointment create successfully",
 
-      data: result,
+      data: result.data,
+      meta: result.meta,
     });
   }
 );

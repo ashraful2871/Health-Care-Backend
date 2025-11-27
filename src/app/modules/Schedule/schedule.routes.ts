@@ -10,6 +10,13 @@ router.get(
   auth(UserRole.ADMIN, UserRole.DOCTOR),
   scheduleController.schedulesForDoctor
 );
+
+router.get(
+  "/:id",
+  auth(UserRole.ADMIN, UserRole.DOCTOR, UserRole.PATIENT),
+  scheduleController.getByIdFromDB
+);
+
 router.post("/", auth(UserRole.ADMIN), scheduleController.insertIntoDB);
 router.delete(
   "/:id",

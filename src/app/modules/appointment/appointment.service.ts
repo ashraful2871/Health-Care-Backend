@@ -11,6 +11,8 @@ import { IJWTPayload } from "../../type/common";
 import { v4 as uuidv4 } from "uuid";
 import ApiError from "../../Errors/apiError";
 import statusCode from "http-status";
+import { IAuthUser } from "../../interfaces/common";
+import { IPaginationOptions } from "../../interfaces/pagination";
 
 const createAppointment = async (
   user: IJWTPayload,
@@ -102,9 +104,9 @@ const createAppointment = async (
 };
 
 const getMyAppointment = async (
-  user: IJWTPayload,
+  user: IAuthUser,
   filters: any,
-  options: IOptions
+  options: IPaginationOptions
 ) => {
   const { limit, page, skip, sortBy, sortOrder } =
     paginationHelper.calculatePagination(options);
@@ -112,13 +114,13 @@ const getMyAppointment = async (
 
   const andConditions: Prisma.AppointmentWhereInput[] = [];
 
-  if (user.role === UserRole.PATIENT) {
+  if (user?.role === UserRole.PATIENT) {
     andConditions.push({
       patient: {
         email: user.email,
       },
     });
-  } else if (user.role === UserRole.DOCTOR) {
+  } else if (user?.role === UserRole.DOCTOR) {
     andConditions.push({
       doctor: {
         email: user.email,
@@ -143,9 +145,26 @@ const getMyAppointment = async (
     where: whereConditions,
     skip,
     take: limit,
-    orderBy: { [sortBy]: sortOrder },
+    orderBy:
+      options.sortBy && options.sortOrder
+        ? {
+            [options.sortBy]: options.sortOrder,
+          }
+        : { createdAt: "desc" },
     include:
-      user.role === UserRole.DOCTOR ? { patient: true } : { doctor: true },
+      user?.role === UserRole.PATIENT
+        ? { doctor: true, schedule: true, review: true, prescription: true }
+        : {
+            patient: {
+              include: {
+                medicalReport: true,
+                patientHealthData: true,
+              },
+            },
+            schedule: true,
+            prescription: true,
+            review: true,
+          },
   });
 
   const total = await prisma.appointment.count({

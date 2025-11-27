@@ -18,6 +18,17 @@ const insertIntoDB = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getByIdFromDB = catchAsync(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await scheduleService.getByIdFromDB(id);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Schedule retrieval successfully",
+    data: result,
+  });
+});
+
 const schedulesForDoctor = catchAsync(
   async (req: Request & { user?: IJWTPayload }, res: Response) => {
     const option = pick(req.query, ["page", "limit", "sortBy", "sortOrder"]);
@@ -53,5 +64,6 @@ const deleteScheduleFromDb = catchAsync(async (req: Request, res: Response) => {
 export const scheduleController = {
   insertIntoDB,
   schedulesForDoctor,
+  getByIdFromDB,
   deleteScheduleFromDb,
 };

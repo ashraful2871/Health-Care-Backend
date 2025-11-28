@@ -15,12 +15,12 @@ import { IAuthUser } from "../../interfaces/common";
 import { IPaginationOptions } from "../../interfaces/pagination";
 
 const createAppointment = async (
-  user: IJWTPayload,
+  user: IAuthUser,
   payload: { doctorId: string; scheduleId: string }
 ) => {
   const patientData = await prisma.patient.findUniqueOrThrow({
     where: {
-      email: user.email,
+      email: user?.email,
     },
   });
 
@@ -31,7 +31,7 @@ const createAppointment = async (
     },
   });
 
-  const isBookedOrNot = await prisma.doctorSchedules.findFirstOrThrow({
+  await prisma.doctorSchedules.findFirstOrThrow({
     where: {
       doctorId: payload.doctorId,
       scheduleId: payload.scheduleId,
@@ -49,6 +49,11 @@ const createAppointment = async (
         scheduleId: payload.scheduleId,
         videoCallingId,
       },
+      include: {
+        patient: true,
+        doctor: true,
+        schedule: true,
+      },
     });
 
     await tnx.doctorSchedules.update({
@@ -60,12 +65,25 @@ const createAppointment = async (
       },
       data: {
         isBooked: true,
+        appointmentId: appointmentData.id,
       },
     });
 
-    const transactionId = uuidv4();
+    const today = new Date();
 
-    const paymentData = await tnx.payment.create({
+    const transactionId =
+      "HealthCare" +
+      today.getFullYear() +
+      "-" +
+      today.getMonth() +
+      "-" +
+      today.getDay() +
+      "-" +
+      today.getHours() +
+      "-" +
+      today.getMinutes();
+
+    await tnx.payment.create({
       data: {
         appointmentId: appointmentData.id,
         amount: doctorData.appointmentFee,
@@ -73,31 +91,41 @@ const createAppointment = async (
       },
     });
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      mode: "payment",
-      customer_email: user.email,
-      line_items: [
-        {
-          price_data: {
-            currency: "bdt",
-            product_data: {
-              name: `Appointment with ${doctorData.name}`,
-            },
-            unit_amount: doctorData.appointmentFee * 100,
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        appointmentId: appointmentData.id,
-        paymentId: paymentData.id,
-      },
-      success_url: `https://www.programming-hero.com/`,
-      cancel_url: `https://next.programming-hero.com/`,
-    });
+    return appointmentData;
 
-    return { paymentUrl: session.url };
+    // const paymentData = await tnx.payment.create({
+    //   data: {
+    //     appointmentId: appointmentData.id,
+    //     amount: doctorData.appointmentFee,
+    //     transactionId,
+    //   },
+    // });
+    // const transactionId = uuidv4();
+    // const session = await stripe.checkout.sessions.create({
+    //   payment_method_types: ["card"],
+    //   mode: "payment",
+    //   customer_email: user?.email,
+    //   line_items: [
+    //     {
+    //       price_data: {
+    //         currency: "bdt",
+    //         product_data: {
+    //           name: `Appointment with ${doctorData.name}`,
+    //         },
+    //         unit_amount: doctorData.appointmentFee * 100,
+    //       },
+    //       quantity: 1,
+    //     },
+    //   ],
+    //   metadata: {
+    //     appointmentId: appointmentData.id,
+    //     paymentId: paymentData.id,
+    //   },
+    //   success_url: `https://www.programming-hero.com/`,
+    //   cancel_url: `https://next.programming-hero.com/`,
+    // });
+
+    // return { paymentUrl: session.url };
   });
 
   return result;

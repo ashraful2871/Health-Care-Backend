@@ -9,16 +9,17 @@ import { prisma } from "../../shared/prisma";
 import ApiError from "../../Errors/apiError";
 import { StatusCodes } from "http-status-codes";
 import { IOptions, paginationHelper } from "../../helper/paginationHelper";
+import { IAuthUser } from "../../interfaces/common";
 
-const createAppointment = async (
-  user: IJWTPayload,
+const createPrescription = async (
+  user: IAuthUser,
   payload: Partial<Prescription>
 ) => {
   const appointmentData = await prisma.appointment.findFirstOrThrow({
     where: {
       id: payload.appointmentId,
       status: AppointmentStatus.COMPLETED,
-      paymentStatus: PaymentStatus.PAID,
+      // paymentStatus: PaymentStatus.PAID,
     },
 
     include: {
@@ -26,13 +27,8 @@ const createAppointment = async (
     },
   });
 
-  if (user.role === UserRole.DOCTOR) {
-    if (!(user.email === appointmentData.doctor.email))
-      throw new ApiError(
-        StatusCodes.BAD_REQUEST,
-        "This is not your appointment"
-      );
-  }
+  if (!(user?.email === appointmentData.doctor.email))
+    throw new ApiError(StatusCodes.BAD_REQUEST, "This is not your appointment");
 
   return await prisma.prescription.create({
     data: {
@@ -88,6 +84,6 @@ const patientPrescription = async (user: IJWTPayload, options: IOptions) => {
   };
 };
 export const prescriptionsService = {
-  createAppointment,
+  createPrescription,
   patientPrescription,
 };

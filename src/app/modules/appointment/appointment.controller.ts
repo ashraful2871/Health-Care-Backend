@@ -38,7 +38,7 @@ const getMyAppointment = catchAsync(
     sendResponse(res, {
       statusCode: status.OK,
       success: true,
-      message: "Appointment create successfully",
+      message: "Appointment Fetch successfully",
 
       data: result.data,
       meta: result.meta,

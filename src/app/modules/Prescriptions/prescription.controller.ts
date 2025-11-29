@@ -9,7 +9,7 @@ import { StatusCodes } from "http-status-codes";
 const createPrescription = catchAsync(
   async (req: Request & { user?: IJWTPayload }, res: Response) => {
     const user = req.user;
-    const result = await prescriptionsService.createAppointment(
+    const result = await prescriptionsService.createPrescription(
       user as IJWTPayload,
       req.body
     );

@@ -13,6 +13,7 @@ import ApiError from "../../Errors/apiError";
 import statusCode from "http-status";
 import { IAuthUser } from "../../interfaces/common";
 import { IPaginationOptions } from "../../interfaces/pagination";
+import { StatusCodes } from "http-status-codes";
 
 const createAppointment = async (
   user: IAuthUser,
@@ -212,7 +213,7 @@ const getMyAppointment = async (
 const updateAppointmentStatus = async (
   appointmentId: string,
   status: AppointmentStatus,
-  user: IJWTPayload
+  user: IAuthUser
 ) => {
   const appointmentData = await prisma.appointment.findUniqueOrThrow({
     where: {
@@ -223,10 +224,10 @@ const updateAppointmentStatus = async (
     },
   });
 
-  if (user.role === UserRole.DOCTOR) {
-    if (!(user.email === appointmentData.doctor.email))
+  if (user?.role === UserRole.DOCTOR) {
+    if (!(user?.email === appointmentData.doctor.email))
       throw new ApiError(
-        statusCode.BAD_REQUEST,
+        StatusCodes.BAD_REQUEST,
         "This IS not Your Appointment"
       );
   }
@@ -244,7 +245,8 @@ const updateAppointmentStatus = async (
 const cancelUnpaidAppointments = async () => {
   const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
 
-  const unpaidAppointments = await prisma.appointment.findMany({
+  // Find unpaid appointments older than 30 minutes
+  const unPaidAppointments = await prisma.appointment.findMany({
     where: {
       createdAt: {
         lte: thirtyMinAgo,
@@ -253,42 +255,42 @@ const cancelUnpaidAppointments = async () => {
     },
   });
 
-  const appointmentsIdsToCancel = unpaidAppointments.map(
-    (appointment) => appointment.id
-  );
+  const appointmentIdsToCancel = unPaidAppointments.map((a) => a.id);
 
-  await prisma.$transaction(async (tnx) => {
-    await tnx.payment.deleteMany({
-      where: {
-        appointmentId: {
-          in: appointmentsIdsToCancel,
-        },
-      },
+  if (appointmentIdsToCancel.length === 0) return; // Nothing to cancel
+
+  await prisma.$transaction(async (tx) => {
+    // Delete dependent records first
+    await tx.prescription.deleteMany({
+      where: { appointmentId: { in: appointmentIdsToCancel } },
     });
 
-    await tnx.appointment.deleteMany({
-      where: {
-        id: {
-          in: appointmentsIdsToCancel,
-        },
-      },
+    await tx.review.deleteMany({
+      where: { appointmentId: { in: appointmentIdsToCancel } },
     });
 
-    for (const unpaidAppointment of unpaidAppointments) {
-      await tnx.doctorSchedules.update({
+    await tx.payment.deleteMany({
+      where: { appointmentId: { in: appointmentIdsToCancel } },
+    });
+
+    // Delete appointments
+    await tx.appointment.deleteMany({
+      where: { id: { in: appointmentIdsToCancel } },
+    });
+
+    // Reset doctor schedules
+    for (const appointment of unPaidAppointments) {
+      await tx.doctorSchedules.updateMany({
         where: {
-          doctorId_scheduleId: {
-            doctorId: unpaidAppointment.doctorId,
-            scheduleId: unpaidAppointment.scheduleId,
-          },
+          doctorId: appointment.doctorId,
+          scheduleId: appointment.scheduleId,
         },
-        data: {
-          isBooked: false,
-        },
+        data: { isBooked: false },
       });
     }
   });
 };
+
 export const appointmentService = {
   createAppointment,
   getMyAppointment,
